@@ -9,124 +9,137 @@ $config = [
     'gold' => '1000000000',
 ];
 
-        error_reporting(E_ALL);
-        ini_set('display_errors', 1);
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
-        function mysqli_result($res, $row = 0, $col = 0)
-        {
-            $numrows = mysqli_num_rows($res);
-            if ($numrows && $row <= ($numrows - 1) && $row >= 0) {
-                mysqli_data_seek($res, $row);
-                $resrow = (is_numeric($col)) ? mysqli_fetch_row($res) : mysqli_fetch_assoc($res);
-                return $resrow[$col] ?? false;
-            }
-            return false;
-        }
+function mysqli_result($res, $row = 0, $col = 0)
+{
+    $numrows = mysqli_num_rows($res);
+    if ($numrows && $row <= ($numrows - 1) && $row >= 0) {
+        mysqli_data_seek($res, $row);
+        $resrow = (is_numeric($col)) ? mysqli_fetch_row($res) : mysqli_fetch_assoc($res);
+        return $resrow[$col] ?? false;
+    }
+    return false;
+}
 
-        // Function to generate a random captcha code
-        function generateCaptchaCode($length = 4)
-        {
-            $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-            $captchaCode = '';
-            for ($i = 0; $i < $length; $i++) {
-                $captchaCode .= $characters[rand(0, strlen($characters) - 1)];
-            }
-            return $captchaCode;
-        }
+// Function to generate a random captcha code
+function generateCaptchaCode($length = 4)
+{
+    $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    $captchaCode = '';
+    for ($i = 0; $i < $length; $i++) {
+        $captchaCode .= $characters[rand(0, strlen($characters) - 1)];
+    }
+    return $captchaCode;
+}
 
-        if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['login'])) {
-            $link = new mysqli($config['host'], $config['user'], $config['pass'], $config['name']);
+// Function to generate captcha image
+function generateCaptchaImage($captchaCode)
+{
+    $captchaImage = imagecreatefrompng('captcha-background.png'); // Replace with your captcha background image
+    $captchaTextColor = imagecolorallocate($captchaImage, 255, 255, 255);
+    imagestring($captchaImage, 5, 10, 5, $captchaCode, $captchaTextColor);
 
-            // Check connection
-            if ($link->connect_error) {
-                die("Connection failed: " . $link->connect_error);
-            }
+    // Output the captcha image as base64
+    ob_start();
+    imagepng($captchaImage);
+    $captchaImageData = ob_get_clean();
 
-            $Login = trim(strtolower($_POST['login']));
-            $Pass = trim(strtolower($_POST['passwd']));
-            $Repass = trim(strtolower($_POST['repasswd']));
-            $Email = trim($_POST['email']);
-            $EnteredCaptcha = trim($_POST['captcha']);
+    return $captchaImageData;
+}
 
-            $alerts = [];
+if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['login'])) {
+    $link = new mysqli($config['host'], $config['user'], $config['pass'], $config['name']);
 
-            // Check captcha
-            if ($EnteredCaptcha !== $_SESSION['captcha']) {
-                $alerts[] = "Captcha code is incorrect.";
-            } elseif (empty($Login) || empty($Pass) || empty($Repass) || empty($Email)) {
-                $alerts[] = "All fields are required.";
-            } elseif (!preg_match("/^[0-9a-zA-Z_-]+$/", $Login)) {
-                $alerts[] = "Invalid login format. Use only alphanumeric characters, hyphens, and underscores.";
-            } elseif (!preg_match("/^[0-9a-zA-Z_-]+$/", $Pass)) {
-                $alerts[] = "Invalid password format. Use only alphanumeric characters, hyphens, and underscores.";
-            } elseif (!preg_match("/^[0-9a-zA-Z_-]+$/", $Repass)) {
-                $alerts[] = "Invalid retry password format. Use only alphanumeric characters, hyphens, and underscores.";
-            } elseif (!filter_var($Email, FILTER_VALIDATE_EMAIL)) {
-                $alerts[] = "Invalid E-Mail Format.";
-            } elseif (strlen($Login) < 4 || strlen($Login) > 10) {
-                $alerts[] = "The login must be between 4 and 10 characters.";
+    // Check connection
+    if ($link->connect_error) {
+        die("Connection failed: " . $link->connect_error);
+    }
+
+    $Login = trim(strtolower($_POST['login']));
+    $Pass = trim(strtolower($_POST['passwd']));
+    $Repass = trim(strtolower($_POST['repasswd']));
+    $Email = trim($_POST['email']);
+    $EnteredCaptcha = trim($_POST['captcha']);
+
+    $alerts = [];
+
+    // Check captcha
+    if ($EnteredCaptcha !== $_SESSION['captcha']) {
+        $alerts[] = "Captcha code is incorrect.";
+    } elseif (empty($Login) || empty($Pass) || empty($Repass) || empty($Email)) {
+        $alerts[] = "All fields are required.";
+    } elseif (!preg_match("/^[0-9a-zA-Z_-]+$/", $Login)) {
+        $alerts[] = "Invalid login format. Use only alphanumeric characters, hyphens, and underscores.";
+    } elseif (!preg_match("/^[0-9a-zA-Z_-]+$/", $Pass)) {
+        $alerts[] = "Invalid password format. Use only alphanumeric characters, hyphens, and underscores.";
+    } elseif (!preg_match("/^[0-9a-zA-Z_-]+$/", $Repass)) {
+        $alerts[] = "Invalid retry password format. Use only alphanumeric characters, hyphens, and underscores.";
+    } elseif (!filter_var($Email, FILTER_VALIDATE_EMAIL)) {
+        $alerts[] = "Invalid E-Mail Format.";
+    } elseif (strlen($Login) < 4 || strlen($Login) > 10) {
+        $alerts[] = "The login must be between 4 and 10 characters.";
+    } else {
+        $stmt = $link->prepare("SELECT name FROM users WHERE name=?");
+        $stmt->bind_param("s", $Login);
+        $stmt->execute();
+        $stmt->store_result();
+
+        if ($stmt->num_rows > 0) {
+            $alerts[] = "Login <b>$Login</b> already exists in the database.";
+        } elseif (strlen($Pass) < 4 || strlen($Pass) > 10) {
+            $alerts[] = "The password must be between 4 and 10 characters.";
+        } elseif (strlen($Repass) < 4 || strlen($Repass) > 10) {
+            $alerts[] = "Repeat password must be between 4 and 10 characters.";
+        } elseif (strlen($Email) < 4 || strlen($Email) > 25) {
+            $alerts[] = "E-Mail must be between 4 and 25 characters.";
+        } else {
+            $stmt = $link->prepare("SELECT name FROM users WHERE name=?");
+            $stmt->bind_param("s", $Email);
+            $stmt->execute();
+            $stmt->store_result();
+
+            if ($stmt->num_rows > 0) {
+                $alerts[] = "E-Mail <b>$Email</b> already exists in the database.";
+            } elseif ($Pass !== $Repass) {
+                $alerts[] = "Passwords do not match.";
             } else {
-                $stmt = $link->prepare("SELECT name FROM users WHERE name=?");
-                $stmt->bind_param("s", $Login);
+                $Salt = base64_encode(md5($Login . $Pass, true));
+                $stmt = $link->prepare("CALL adduser(?, ?, '0', '0', '0', '0', ?, '0', '0', '0', '0', '0', '0', '0', NULL, '', ?)");
+                $stmt->bind_param("ssss", $Login, $Salt, $Email, $Salt);
                 $stmt->execute();
-                $stmt->store_result();
 
-                if ($stmt->num_rows > 0) {
-                    $alerts[] = "Login <b>$Login</b> already exists in the database.";
-                } elseif (strlen($Pass) < 4 || strlen($Pass) > 10) {
-                    $alerts[] = "The password must be between 4 and 10 characters.";
-                } elseif (strlen($Repass) < 4 || strlen($Repass) > 10) {
-                    $alerts[] = "Repeat password must be between 4 and 10 characters.";
-                } elseif (strlen($Email) < 4 || strlen($Email) > 25) {
-                    $alerts[] = "E-Mail must be between 4 and 25 characters.";
-                } else {
-                    $stmt = $link->prepare("SELECT name FROM users WHERE name=?");
-                    $stmt->bind_param("s", $Email);
-                    $stmt->execute();
-                    $stmt->store_result();
+                $mysqlresult = mysqli_query($link, "SELECT * FROM `users` WHERE `name`='$Login'");
+                $User_ID = mysqli_result($mysqlresult, 0, 'ID');
+                $stmt = $link->prepare("CALL usecash(?, ?, 0, ?, 0, ?, 1, @error)");
+                $stmt->bind_param("iiii", $User_ID, $Zone_ID, $A_ID, $config['gold']);
+                $stmt->execute();
 
-                    if ($stmt->num_rows > 0) {
-                        $alerts[] = "E-Mail <b>$Email</b> already exists in the database.";
-                    } elseif ($Pass !== $Repass) {
-                        $alerts[] = "Passwords do not match.";
-                    } else {
-                        $Salt = base64_encode(md5($Login . $Pass, true));
-                        $stmt = $link->prepare("CALL adduser(?, ?, '0', '0', '0', '0', ?, '0', '0', '0', '0', '0', '0', '0', NULL, '', ?)");
-                        $stmt->bind_param("ssss", $Login, $Salt, $Email, $Salt);
-                        $stmt->execute();
-
-                        $mysqlresult = mysqli_query($link, "SELECT * FROM `users` WHERE `name`='$Login'");
-                        $User_ID = mysqli_result($mysqlresult, 0, 'ID');
-                        $stmt = $link->prepare("CALL usecash(?, ?, 0, ?, 0, ?, 1, @error)");
-                        $stmt->bind_param("iiii", $User_ID, $Zone_ID, $A_ID, $config['gold']);
-                        $stmt->execute();
-
-                        $alerts[] = "Account name <b>$Login</b> successfully registered. User ID: $User_ID. If Gold was applied, it will be available in 5-10 minutes.";
-                    }
-                }
+                $alerts[] = "Account name <b>$Login</b> successfully registered. User ID: $User_ID. If Gold was applied, it will be available in 5-10 minutes.";
             }
-            $stmt = null; // Initialize $stmt
-            // Display alerts
-            foreach ($alerts as $alert) {
-                $alertClass = 'info'; // Use 'info' class for neutral color
-                echo "<div class='alert alert-dismissible alert-$alertClass mt-3'>
-                        <button type='button' class='close' data-dismiss='alert'>&times;</button>
-                        $alert
-                      </div>";
-            }
-
-// Clear the captcha code from the session after form submission
-unset($_SESSION['captcha']);
-
-// No need to close $stmt again here
-// $stmt->close();  // Commented out to prevent the error
-
-$link->close(); // Close the connection here
         }
+    }
+    $stmt = null; // Initialize $stmt
+    // Display alerts
+    foreach ($alerts as $alert) {
+        $alertClass = 'info'; // Use 'info' class for neutral color
+        echo "<div class='alert alert-dismissible alert-$alertClass mt-3'>
+                <button type='button' class='close' data-dismiss='alert'>&times;</button>
+                $alert
+              </div>";
+    }
 
+    // Clear the captcha code from the session after form submission
+    unset($_SESSION['captcha']);
 
-        ?>
-        
+    // No need to close $stmt again here
+    // $stmt->close();  // Commented out to prevent the error
+
+    $link->close(); // Close the connection here
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -171,8 +184,6 @@ $link->close(); // Close the connection here
 
 <body>
     <div class="container mt-5">
-
-
         <form id="register" action="<?= $_SERVER['PHP_SELF']; ?>" method="post" class="col-md-6 offset-md-3">
             <h3 class="mb-4 text-center">Registration on the server</h3>
             <h3 class="text-center">Perfect World Server Name Here</h3>
@@ -194,10 +205,16 @@ $link->close(); // Close the connection here
                 <input class="form-control" type="email" name="email" id="email" required>
             </div>
 
-                        <!-- Display the captcha image -->
-                        <div class="form-group">
+            <!-- Display the captcha image -->
+            <div class="form-group">
                 <label for="captcha">Captcha:</label>
-                <img src="captcha.php" alt="Captcha Image">
+                <?php
+                // Generate captcha code and store it in the session
+                $_SESSION['captcha'] = generateCaptchaCode();
+
+                // Output the captcha image directly in the HTML
+                echo '<img src="data:image/png;base64,' . base64_encode(generateCaptchaImage($_SESSION['captcha'])) . '" alt="Captcha Image">';
+                ?>
                 <input class="form-control" type="text" name="captcha" id="captcha" required>
             </div>
 
@@ -206,9 +223,9 @@ $link->close(); // Close the connection here
     </div>
 
     <!-- Footer -->
-<footer class="footer mt-5 text-center">
-    <p>Created by shiank98 for RageZone</p>
-</footer>
+    <footer class="footer mt-5 text-center">
+        <p>Created by shiank98 for RageZone</p>
+    </footer>
 </body>
 
 </html>
