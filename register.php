@@ -224,7 +224,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['login'])) {
 
     <!-- Footer -->
     <footer class="footer mt-5 text-center">
-        <p>Created by shiank98 for RageZone</p>
+        <p>Created by shiank98</p>
     </footer>
 </body>
 
